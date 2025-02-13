@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pyw
+*.pyz   
+
+# Environment
+venv/
+.env
+
+# Streamlit
+.streamlit/secrets.toml
+
+
+# Data
+data/tmp
