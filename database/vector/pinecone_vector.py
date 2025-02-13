@@ -1,22 +1,32 @@
 import os
 import pinecone
-from langchain.vectorstores import Pinecone
-from langchain.embeddings import OpenAIEmbeddings
+from langchain_community.vectorstores import Pinecone
 
-def embeddings_on_pinecone(texts):
+
+class PineconeVectorDB:
     """
     Embeds the texts using Pinecone embeddings and stores them in a Pinecone vector database.
     """
-    pinecone.init(
-        api_key=os.getenv("PINECONE_API_KEY"), environment=os.getenv("PINECONE_ENV")
-    )
 
-    embeddings = OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
+    @staticmethod
+    def embeddings_on_pinecone(embeddings, texts):
+        """
+        Embeds the texts using Pinecone embeddings and stores them in a Pinecone vector database.
 
-    vector_store = Pinecone.from_documents(
-        texts,
-        embeddings,
-        index_name=os.getenv("PINECONE_INDEX"),
-    )
+        Args:
+            embeddings: Embeddings object
+            texts: List of texts to embed
+        Returns:
+            vector_store: Pinecone vector database
+        """
+        pinecone.init(
+            api_key=os.getenv("PINECONE_API_KEY"), environment=os.getenv("PINECONE_ENV")
+        )
 
-    return vector_store
+        vector_store = Pinecone.from_documents(
+            texts,
+            embeddings,
+            index_name=os.getenv("PINECONE_INDEX"),
+        )
+
+        return vector_store

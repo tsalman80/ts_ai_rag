@@ -12,7 +12,20 @@ venv/
 
 # Streamlit
 .streamlit/secrets.toml
-
+config.toml
 
 # Data
-data/tmp
+data/
+
+# Langchain
+.langchain/
+
+# Local Vector
+local_vector/
+
+# Pinecone Vector
+pinecone_vector/
+
+# Logs
+output.log
+

@@ -1,20 +1,35 @@
 import os
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import Chroma
+from pathlib import Path
+from langchain_community.vectorstores import Chroma
+
+# local vector store directory
+LOCAL_VECTOR_STORE_DIR = (
+    Path(__file__).resolve().parents[2].joinpath("data", "vector_store")
+)
+
+print(LOCAL_VECTOR_STORE_DIR)
 
 
-def embeddings_on_local_vectordb(texts):
+class LocalVectorDB:
     """
     Embeds the texts using OpenAI embeddings and stores them in a local vector database.
-
     """
 
-    embeddings = OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
+    @staticmethod
+    def embeddings_on_local_vectordb(embeddings, texts):
+        """
+        Embeds the texts using OpenAI embeddings and stores them in a local vector database.
 
-    vector_store = Chroma.from_documents(
-        texts, embeddings, persist_directory=LOCAL_VECTOR_STORE_DIR.as_posix()
-    )
+        Args:
+            embeddings: Embeddings object
+            texts: List of texts to embed
+        Returns:
+            retriever: Retriever object
+        """
 
-    vector_store.persist()
-    retriever = vector_store.as_retriever(search_kwargs={"k": 7})
-    return retriever
+        vector_store = Chroma.from_documents(
+            texts, embeddings, persist_directory=LOCAL_VECTOR_STORE_DIR.as_posix()
+        )
+
+        retriever = vector_store.as_retriever(search_kwargs={"k": 7})
+        return retriever
