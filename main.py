@@ -1,3 +1,4 @@
+from documents import DocumentProcessor
 from langchain.globals import set_verbose, set_debug
 
 set_verbose(True)
@@ -19,6 +20,8 @@ from langchain.chains import create_history_aware_retriever, create_retrieval_ch
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 from langchain import hub
+
+st.set_page_config(layout="wide")
 
 
 def query_llm(retriever, query):
@@ -89,105 +92,123 @@ def write_documents(uploaded_files):
     return temp_dir
 
 
+def load_file(uploaded_files):
+    if not uploaded_files or st.session_state["has_documents_uploaded"]:
+        return
+
+    status_bar = None
+    status_bar = st.progress(0, text="Loading documents...")
+
+    # write the uploaded documents to the temporary directory
+    temp_dir = write_documents(st.session_state.source_documents)
+    status_bar.progress(0.25, text="Documents loaded")
+
+    # load the documents from the temporary directory
+    documents = DocumentLoader.load(temp_dir)
+    status_bar.progress(0.5, text="Documents split")
+
+    # split the documents into chunks
+    chunks = DocumentSplitter.chunk(documents)
+    status_bar.progress(0.75, text="Documents embedded")
+
+    # embed the chunks
+    embeddings = OpenAIEmbeddings(
+        openai_api_key=OPENAI_API_KEY,
+        model="text-embedding-3-small",
+    )
+    status_bar.progress(0.9, text="Documents embedded")
+
+    # embed the chunks on the vector database
+    retriever = None
+    if st.session_state.pinecone_db:
+        retriever = PineconeVectorDB.embeddings_on_pinecone(embeddings, chunks)
+    else:
+        retriever = LocalVectorDB.embeddings_on_local_vectordb(embeddings, chunks)
+    st.session_state["retriever"] = retriever
+
+    status_bar.progress(100, text="Ready to chat!")
+
+    st.session_state["has_documents_uploaded"] = True
+
+    if status_bar:
+        time.sleep(1)
+        status_bar.empty()
+
+
+def chat_interface():
+    retriever = st.session_state["retriever"]
+
+    # Initialize chat history
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    # Display chat messages from history on app rerun
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    # Accept user input
+    if prompt := st.chat_input("Ask me anything about the uploaded documents..."):
+        # Add user message to chat history
+        st.session_state.messages.append({"role": "user", "content": prompt})
+
+        # Display user message in chat message container
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        # Display assistant response in chat message container
+        with st.chat_message("assistant"):
+            message_placeholder = st.markdown("")
+
+            # Query the LLM
+            response = query_llm(retriever, prompt)
+            message_placeholder.empty()
+            message_placeholder.markdown(response + " ")
+
+        # Add assistant response to chat history
+        st.session_state.messages.append({"role": "assistant", "content": response})
+        st.session_state.chat_history = st.session_state.messages
+
+
 def page_main():
     """
     Main page of the application.
     """
+    if "has_documents_uploaded" not in st.session_state:
+        st.session_state["has_documents_uploaded"] = False
+
     st.title("AI RAG")
     st.write(
         "This is a simple chatbot that uses a vector database to store and retrieve documents."
     )
 
-    st.write("Upload your documents and start chatting with the AI!")
-
-    if "has_documents_uploaded" not in st.session_state:
-        st.session_state["has_documents_uploaded"] = False
+    st.caption("Upload your documents and start chatting with the AI!")
 
     with st.sidebar:
+        st.title("Settings")
         st.session_state.pinecone_db = st.toggle("Use Pinecone Vector DB", value=False)
-
-        st.session_state.source_documents = st.file_uploader(
+        selected_files = st.file_uploader(
             "Upload PDF documents",
             type="pdf",
             accept_multiple_files=True,
-            help="Upload PDF documents to be used for review",
         )
 
-        status_bar = None
-        if (
-            st.session_state.source_documents
-            and not st.session_state["has_documents_uploaded"]
-        ):
-            status_bar = st.progress(0, text="Loading documents...")
+        for file in selected_files:
+            if not DocumentProcessor.is_valid_file_size(file):
+                st.toast(f":red[File size is too large!] {file.name}")
+                selected_files.remove(file)
 
-            # write the uploaded documents to the temporary directory
-            temp_dir = write_documents(st.session_state.source_documents)
-            status_bar.progress(0.25, text="Documents loaded")
+        st.session_state.source_documents = selected_files
+        button_load_file = st.button("Load documents", use_container_width=True)
 
-            # load the documents from the temporary directory
-            documents = DocumentLoader.load_documents(temp_dir)
-            status_bar.progress(0.5, text="Documents split")
-
-            # split the documents into chunks
-            chunks = DocumentSplitter.split_documents(documents)
-            status_bar.progress(0.75, text="Documents embedded")
-
-            # embed the chunks
-            embeddings = OpenAIEmbeddings(
-                openai_api_key=OPENAI_API_KEY,
-                model="text-embedding-3-small",
-            )
-            status_bar.progress(0.9, text="Documents embedded")
-
-            # embed the chunks on the vector database
-            if st.session_state.pinecone_db:
-                retriever = PineconeVectorDB.embeddings_on_pinecone(embeddings, chunks)
-            else:
-                retriever = LocalVectorDB.embeddings_on_local_vectordb(embeddings, chunks)
-
-            status_bar.progress(100, text="Ready to chat!")
-
-            st.session_state["has_documents_uploaded"] = True
-            st.session_state["retriever"] = retriever
-
-        if status_bar:
-            time.sleep(1)
-            status_bar.empty()
+    if button_load_file:
+        if not st.session_state.source_documents:
+            st.toast(":red[No documents selected!]")
+        else:
+            load_file(st.session_state.source_documents)
 
     if st.session_state["has_documents_uploaded"]:
-        retriever = st.session_state["retriever"]
-
-        # Initialize chat history
-        if "messages" not in st.session_state:
-            st.session_state.messages = []
-
-        # Display chat messages from history on app rerun
-        for message in st.session_state.messages:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
-
-        # Accept user input
-        if prompt := st.chat_input("Ask me anything about the uploaded documents..."):
-            # Add user message to chat history
-            st.session_state.messages.append({"role": "user", "content": prompt})
-
-            # Display user message in chat message container
-            with st.chat_message("user"):
-                st.markdown(prompt)
-
-            # Display assistant response in chat message container
-            with st.chat_message("assistant"):
-                message_placeholder = st.empty()
-                response = ""
-
-                # Query the LLM
-                response = query_llm(retriever, prompt)
-
-                message_placeholder.markdown(response + " ")
-
-            # Add assistant response to chat history
-            st.session_state.messages.append({"role": "assistant", "content": response})
-            st.session_state.chat_history = st.session_state.messages
+        chat_interface()
 
 
 if __name__ == "__main__":

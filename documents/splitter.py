@@ -7,7 +7,7 @@ class DocumentSplitter:
     """
 
     @staticmethod
-    def split_documents(documents):
+    def chunk(documents):
         """
             Splits the documents into chunks of text.
 

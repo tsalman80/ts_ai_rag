@@ -7,7 +7,7 @@ class DocumentLoader:
     """
 
     @staticmethod
-    def load_documents(dir_path):
+    def load(dir_path):
         """
         Loads PDF documents from the temporary directory.
 
@@ -15,6 +15,6 @@ class DocumentLoader:
             documents: List of loaded document objects
         """
 
-        loader = PyPDFDirectoryLoader(dir_path,  glob="**/*.pdf")
+        loader = PyPDFDirectoryLoader(dir_path, glob="**/*.pdf")
         documents = loader.load()
         return documents
