@@ -13,11 +13,7 @@ from database.vector.pinecone_vector import PineconeVectorDB
 from documents.loader import DocumentLoader
 from documents.splitter import DocumentSplitter
 import streamlit as st
-
-
-import dotenv
-
-dotenv.load_dotenv()
+from config import OPENAI_API_KEY
 
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
@@ -30,9 +26,7 @@ def query_llm(retriever, query):
     Queries the LLM with the given query and returns the response.
     """
 
-    llm = ChatOpenAI(
-        model="gpt-4o-mini", temperature=0, openai_api_key=os.getenv("OPENAI_API_KEY")
-    )
+    llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=OPENAI_API_KEY)
 
     condense_question_system_template = (
         "Given a chat history and the latest user question "
@@ -137,16 +131,19 @@ def page_main():
             # split the documents into chunks
             chunks = DocumentSplitter.split_documents(documents)
             status_bar.progress(0.75, text="Documents embedded")
+
             # embed the chunks
-            embeddings = OpenAIEmbeddings(openai_api_key=os.getenv("OPENAI_API_KEY"))
+            embeddings = OpenAIEmbeddings(
+                openai_api_key=OPENAI_API_KEY,
+                model="text-embedding-3-small",
+            )
             status_bar.progress(0.9, text="Documents embedded")
+
             # embed the chunks on the vector database
             if st.session_state.pinecone_db:
                 retriever = PineconeVectorDB.embeddings_on_pinecone(embeddings, chunks)
             else:
-                retriever = LocalVectorDB.embeddings_on_local_vectordb(
-                    embeddings, chunks
-                )
+                retriever = LocalVectorDB.embeddings_on_local_vectordb(embeddings, chunks)
 
             status_bar.progress(100, text="Ready to chat!")
 
