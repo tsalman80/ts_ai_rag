@@ -1,13 +1,8 @@
 import os
 from pathlib import Path
 from langchain_community.vectorstores import Chroma
-
-# local vector store directory
-LOCAL_VECTOR_STORE_DIR = (
-    Path(__file__).resolve().parents[2].joinpath("data", "vector_store")
-)
-
-print(LOCAL_VECTOR_STORE_DIR)
+from config import LOCAL_VECTOR_STORE_DIR
+import streamlit as st
 
 
 class LocalVectorDB:
@@ -27,8 +22,11 @@ class LocalVectorDB:
             retriever: Retriever object
         """
 
+        # metadata = {"session_id": st.session_state.session_id}
         vector_store = Chroma.from_documents(
-            texts, embeddings, persist_directory=LOCAL_VECTOR_STORE_DIR.as_posix()
+            texts,
+            embeddings,
+            persist_directory=LOCAL_VECTOR_STORE_DIR,
         )
 
         retriever = vector_store.as_retriever(search_kwargs={"k": 7})

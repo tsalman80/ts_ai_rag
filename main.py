@@ -1,8 +1,7 @@
+from pathlib import Path
 from documents import DocumentProcessor
-from langchain.globals import set_verbose, set_debug
 
-set_verbose(True)
-set_debug(True)
+
 import time
 from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_openai.chat_models import ChatOpenAI
@@ -13,13 +12,17 @@ from database.vector.local_vector import LocalVectorDB
 from database.vector.pinecone_vector import PineconeVectorDB
 from documents.loader import DocumentLoader
 from documents.splitter import DocumentSplitter
+from documents import DocumentProcessor
 import streamlit as st
-from config import OPENAI_API_KEY
+from config import OPENAI_API_KEY, TEMP_DIR
 
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 from langchain import hub
+
+from streamlit import runtime
+
 
 st.set_page_config(layout="wide")
 
@@ -54,7 +57,7 @@ def query_llm(retriever, query):
         "You are an assistant for question-answering tasks. "
         "Use the following pieces of retrieved context to answer "
         "the question. If you don't know the answer, say that you "
-        "don't know. Use three sentences maximum and keep the "
+        "don't know. Use three to five sentences maximum and keep the "
         "answer concise."
         "\n\n"
         "<context> {context} </context>"
@@ -82,17 +85,13 @@ def query_llm(retriever, query):
     return result["answer"]
 
 
-def write_documents(uploaded_files):
-    """Write uploaded documents to a temporary directory."""
-    temp_dir = tempfile.mkdtemp(dir="data/tmp")
-    for file in uploaded_files:
-        file_path = os.path.join(temp_dir, file.name)
-        with open(file_path, "wb") as f:
-            f.write(file.getvalue())
-    return temp_dir
+def create_temp_dir():
+    """Create a temporary directory."""
+    tmp_dir = tempfile.mkdtemp(dir=TEMP_DIR)
+    return tmp_dir
 
 
-def load_file(uploaded_files):
+def save_files(uploaded_files):
     if not uploaded_files or st.session_state["has_documents_uploaded"]:
         return
 
@@ -100,16 +99,17 @@ def load_file(uploaded_files):
     status_bar = st.progress(0, text="Loading documents...")
 
     # write the uploaded documents to the temporary directory
-    temp_dir = write_documents(st.session_state.source_documents)
+    tmp_dir = create_temp_dir()
+    DocumentProcessor.write_documents(tmp_dir, st.session_state.source_documents)
     status_bar.progress(0.25, text="Documents loaded")
 
     # load the documents from the temporary directory
-    documents = DocumentLoader.load(temp_dir)
+    documents = DocumentLoader.load(tmp_dir)
     status_bar.progress(0.5, text="Documents split")
 
     # split the documents into chunks
     chunks = DocumentSplitter.chunk(documents)
-    status_bar.progress(0.75, text="Documents embedded")
+    status_bar.progress(0.75, text="Documents split")
 
     # embed the chunks
     embeddings = OpenAIEmbeddings(
@@ -205,11 +205,19 @@ def page_main():
         if not st.session_state.source_documents:
             st.toast(":red[No documents selected!]")
         else:
-            load_file(st.session_state.source_documents)
+            save_files(st.session_state.source_documents)
 
     if st.session_state["has_documents_uploaded"]:
         chat_interface()
 
 
+def get_session_id():
+    from streamlit.runtime.scriptrunner import get_script_run_ctx
+
+    ctx = get_script_run_ctx()
+    return ctx.session_id
+
+
 if __name__ == "__main__":
+    # st.session_state["session_id"] = get_session_id()
     page_main()

@@ -21,3 +21,10 @@ class DocumentProcessor:
             return False
 
         return True
+
+    def write_documents(tmp_dir, uploaded_files):
+        """Write uploaded documents to a temporary directory."""
+        for file in uploaded_files:
+            file_path = os.path.join(tmp_dir, file.name)
+            with open(file_path, "wb") as f:
+                f.write(file.getvalue())
