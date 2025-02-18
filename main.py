@@ -3,7 +3,6 @@ from documents import DocumentProcessor
 
 
 import time
-from langchain_openai.embeddings import OpenAIEmbeddings
 from langchain_openai.chat_models import ChatOpenAI
 
 import os
@@ -19,7 +18,6 @@ from config import OPENAI_API_KEY, TEMP_DIR
 from langchain.chains import create_history_aware_retriever, create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
-from langchain import hub
 
 from streamlit import runtime
 
@@ -34,7 +32,7 @@ def query_llm(retriever, query):
 
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=OPENAI_API_KEY)
 
-    condense_question_system_template = (
+    contextualize_q_system_prompt = (
         "Given a chat history and the latest user question "
         "which might reference context in the chat history, "
         "formulate a standalone question which can be understood "
@@ -44,21 +42,18 @@ def query_llm(retriever, query):
 
     condense_question_prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", condense_question_system_template),
+            ("system", contextualize_q_system_prompt),
             ("placeholder", "{chat_history}"),
             ("human", "{input}"),
         ]
     )
+
     history_aware_retriever = create_history_aware_retriever(
         llm, retriever, condense_question_prompt
     )
 
     system_prompt = (
-        "You are an assistant for question-answering tasks. "
-        "Use the following pieces of retrieved context to answer "
-        "the question. If you don't know the answer, say that you "
-        "don't know. Use three to five sentences maximum and keep the "
-        "answer concise."
+        "You are a helpful assistant that can answer questions about the uploaded documents."
         "\n\n"
         "<context> {context} </context>"
     )
@@ -71,11 +66,13 @@ def query_llm(retriever, query):
         ]
     )
 
-    combine_docs_chain = create_stuff_documents_chain(llm, qa_prompt)
-    retrieval_chain = create_retrieval_chain(
-        history_aware_retriever, combine_docs_chain
-    )
-    result = retrieval_chain.invoke(
+    question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
+
+
+    rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
+
+
+    result = rag_chain.invoke(
         {
             "input": query,
             "chat_history": st.session_state.get("chat_history", []),
@@ -96,34 +93,28 @@ def save_files(uploaded_files):
         return
 
     status_bar = None
-    status_bar = st.progress(0, text="Loading documents...")
+    status_bar = st.progress(0, text="In progress...")
 
     # write the uploaded documents to the temporary directory
     tmp_dir = create_temp_dir()
     DocumentProcessor.write_documents(tmp_dir, st.session_state.source_documents)
-    status_bar.progress(0.25, text="Documents loaded")
+    status_bar.progress(0.25, text="In progress...")
 
     # load the documents from the temporary directory
     documents = DocumentLoader.load(tmp_dir)
-    status_bar.progress(0.5, text="Documents split")
+    status_bar.progress(0.5, text="In progress...")
 
     # split the documents into chunks
     chunks = DocumentSplitter.chunk(documents)
-    status_bar.progress(0.75, text="Documents split")
-
-    # embed the chunks
-    embeddings = OpenAIEmbeddings(
-        openai_api_key=OPENAI_API_KEY,
-        model="text-embedding-3-small",
-    )
-    status_bar.progress(0.9, text="Documents embedded")
+    status_bar.progress(0.75, text="In progress...")
 
     # embed the chunks on the vector database
     retriever = None
     if st.session_state.pinecone_db:
-        retriever = PineconeVectorDB.embeddings_on_pinecone(embeddings, chunks)
+        retriever = PineconeVectorDB.embeddings_on_pinecone(chunks)
     else:
-        retriever = LocalVectorDB.embeddings_on_local_vectordb(embeddings, chunks)
+        retriever = LocalVectorDB.embeddings_on_local_vectordb(chunks)
+    
     st.session_state["retriever"] = retriever
 
     status_bar.progress(100, text="Ready to chat!")
