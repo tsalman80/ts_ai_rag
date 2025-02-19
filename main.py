@@ -1,4 +1,5 @@
 __import__("pysqlite3")
+import os
 import sys
 
 sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
@@ -105,6 +106,9 @@ def query_llm(retriever, query):
 
 def create_tmp_dir():
     """Create a temporary directory."""
+    if not os.path.exists(TEMP_DIR):
+        os.makedirs(TEMP_DIR)
+
     tmp_dir = tempfile.mkdtemp(dir=TEMP_DIR)
     return tmp_dir
 
