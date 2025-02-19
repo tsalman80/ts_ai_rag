@@ -15,7 +15,8 @@ venv/
 config.toml
 
 # Data
-data/
+data/tmp/*
+data/vector_store/*
 
 # Langchain
 .langchain/
