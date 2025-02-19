@@ -1,7 +1,11 @@
+__import__("pysqlite3")
+import sys
+
+sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+import sqlite3
+
 import time
 from langchain_openai.chat_models import ChatOpenAI
-
-import os
 import tempfile
 from database.vector.local_vector import LocalVectorDB
 from database.vector.pinecone_vector import PineconeVectorDB
@@ -64,13 +68,12 @@ def query_llm(retriever, query):
             "chat_history": st.session_state.get("chat_history", [])[:-1],
         }
     )
-    
+
     # log chucks which were matched
     for i, doc in enumerate(result):
         print(f"Chunk {i+1}:")
         print(doc.page_content)
         print()
-        
 
     system_prompt = (
         "You are a helpful assistant that can answer questions about the uploaded documents."
@@ -96,8 +99,6 @@ def query_llm(retriever, query):
             "chat_history": st.session_state.get("chat_history", [])[:-1],
         }
     )
-
-    
 
     return result["answer"]
 
