@@ -41,25 +41,36 @@ def query_llm(retriever, query):
 
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=OPENAI_API_KEY)
 
-    # contextualize_q_system_prompt = (
-    #     "Given a chat history and the latest user question "
-    #     "which might reference context in the chat history, "
-    #     "formulate a standalone question which can be understood "
-    #     "without the chat history. Do NOT answer the question, "
-    #     "just reformulate it if needed and otherwise return it as is."
-    # )
+    contextualize_q_system_prompt = """Given a chat history and the latest user question \
+    which might reference context in the chat history, formulate a standalone question \
+    which can be understood without the chat history. Do NOT answer the question, \
+    just reformulate it if needed and otherwise return it as is."""
 
-    # condense_question_prompt = ChatPromptTemplate.from_messages(
-    #     [
-    #         ("system", contextualize_q_system_prompt),
-    #         ("placeholder", "{chat_history}"),
-    #         ("human", "{input}"),
-    #     ]
-    # )
+    condense_question_prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", contextualize_q_system_prompt),
+            ("placeholder", "{chat_history}"),
+            ("human", "{input}"),
+        ]
+    )
 
-    # history_aware_retriever = create_history_aware_retriever(
-    #     llm, retriever, condense_question_prompt
-    # )
+    history_aware_retriever = create_history_aware_retriever(
+        llm, retriever, condense_question_prompt
+    )
+
+    result = history_aware_retriever.invoke(
+        {
+            "input": query,
+            "chat_history": st.session_state.get("chat_history", [])[:-1],
+        }
+    )
+    
+    # log chucks which were matched
+    for i, doc in enumerate(result):
+        print(f"Chunk {i+1}:")
+        print(doc.page_content)
+        print()
+        
 
     system_prompt = (
         "You are a helpful assistant that can answer questions about the uploaded documents."
@@ -77,7 +88,7 @@ def query_llm(retriever, query):
 
     question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
 
-    rag_chain = create_retrieval_chain(retriever, question_answer_chain)
+    rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
 
     result = rag_chain.invoke(
         {
@@ -85,6 +96,8 @@ def query_llm(retriever, query):
             "chat_history": st.session_state.get("chat_history", [])[:-1],
         }
     )
+
+    
 
     return result["answer"]
 
