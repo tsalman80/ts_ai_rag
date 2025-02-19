@@ -30,10 +30,6 @@ class LocalVectorDB:
             embeddings,
             persist_directory=LOCAL_VECTOR_STORE_DIR,
         )
-        
-        # Save to disk
-        vector_store.persist()
-
 
         retriever = vector_store.as_retriever(search_kwargs={"k": 7})
         return retriever

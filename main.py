@@ -1,7 +1,3 @@
-from pathlib import Path
-from documents import DocumentProcessor
-
-
 import time
 from langchain_openai.chat_models import ChatOpenAI
 
@@ -9,8 +5,9 @@ import os
 import tempfile
 from database.vector.local_vector import LocalVectorDB
 from database.vector.pinecone_vector import PineconeVectorDB
-from documents.loader import DocumentLoader
 from documents.splitter import DocumentSplitter
+from documents.loader import DocumentLoader
+from documents import DocumentProcessor
 from documents import DocumentProcessor
 import streamlit as st
 from config import OPENAI_API_KEY, TEMP_DIR
@@ -22,7 +19,19 @@ from langchain_core.prompts import ChatPromptTemplate
 from streamlit import runtime
 
 
-st.set_page_config(layout="wide")
+st.set_page_config(
+    page_title="AI Chatbot with RAG",
+    page_icon=":material/forum:",
+    layout="centered",
+    initial_sidebar_state="auto",
+    menu_items=None,
+)
+
+if "button_load_file" not in st.session_state:
+    st.session_state["button_load_file"] = False
+
+if "has_documents_uploaded" not in st.session_state:
+    st.session_state["has_documents_uploaded"] = False
 
 
 def query_llm(retriever, query):
@@ -32,25 +41,25 @@ def query_llm(retriever, query):
 
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0, openai_api_key=OPENAI_API_KEY)
 
-    contextualize_q_system_prompt = (
-        "Given a chat history and the latest user question "
-        "which might reference context in the chat history, "
-        "formulate a standalone question which can be understood "
-        "without the chat history. Do NOT answer the question, "
-        "just reformulate it if needed and otherwise return it as is."
-    )
+    # contextualize_q_system_prompt = (
+    #     "Given a chat history and the latest user question "
+    #     "which might reference context in the chat history, "
+    #     "formulate a standalone question which can be understood "
+    #     "without the chat history. Do NOT answer the question, "
+    #     "just reformulate it if needed and otherwise return it as is."
+    # )
 
-    condense_question_prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", contextualize_q_system_prompt),
-            ("placeholder", "{chat_history}"),
-            ("human", "{input}"),
-        ]
-    )
+    # condense_question_prompt = ChatPromptTemplate.from_messages(
+    #     [
+    #         ("system", contextualize_q_system_prompt),
+    #         ("placeholder", "{chat_history}"),
+    #         ("human", "{input}"),
+    #     ]
+    # )
 
-    history_aware_retriever = create_history_aware_retriever(
-        llm, retriever, condense_question_prompt
-    )
+    # history_aware_retriever = create_history_aware_retriever(
+    #     llm, retriever, condense_question_prompt
+    # )
 
     system_prompt = (
         "You are a helpful assistant that can answer questions about the uploaded documents."
@@ -68,35 +77,34 @@ def query_llm(retriever, query):
 
     question_answer_chain = create_stuff_documents_chain(llm, qa_prompt)
 
-
-    rag_chain = create_retrieval_chain(history_aware_retriever, question_answer_chain)
-
+    rag_chain = create_retrieval_chain(retriever, question_answer_chain)
 
     result = rag_chain.invoke(
         {
             "input": query,
-            "chat_history": st.session_state.get("chat_history", []),
+            "chat_history": st.session_state.get("chat_history", [])[:-1],
         }
     )
 
     return result["answer"]
 
 
-def create_temp_dir():
+def upload_files():
     """Create a temporary directory."""
     tmp_dir = tempfile.mkdtemp(dir=TEMP_DIR)
     return tmp_dir
 
 
 def save_files(uploaded_files):
-    if not uploaded_files or st.session_state["has_documents_uploaded"]:
+    if not uploaded_files:
         return
+
+    # write the uploaded documents to the temporary directory
+    tmp_dir = upload_files()
 
     status_bar = None
     status_bar = st.progress(0, text="In progress...")
 
-    # write the uploaded documents to the temporary directory
-    tmp_dir = create_temp_dir()
     DocumentProcessor.write_documents(tmp_dir, st.session_state.source_documents)
     status_bar.progress(0.25, text="In progress...")
 
@@ -114,12 +122,12 @@ def save_files(uploaded_files):
         retriever = PineconeVectorDB.embeddings_on_pinecone(chunks)
     else:
         retriever = LocalVectorDB.embeddings_on_local_vectordb(chunks)
-    
+
     st.session_state["retriever"] = retriever
 
     status_bar.progress(100, text="Ready to chat!")
 
-    st.session_state["has_documents_uploaded"] = True
+    st.session_state.has_documents_uploaded = True
 
     if status_bar:
         time.sleep(1)
@@ -148,33 +156,23 @@ def chat_interface():
             st.markdown(prompt)
 
         # Display assistant response in chat message container
-        with st.chat_message("assistant"):
-            message_placeholder = st.markdown("")
+        if st.session_state.messages[-1]["role"] != "assistant":
+            with st.spinner("Thinking..."):
+                # Query the LLM
+                response = query_llm(retriever, prompt)
 
-            # Query the LLM
-            response = query_llm(retriever, prompt)
-            message_placeholder.empty()
-            message_placeholder.markdown(response + " ")
+                # Add assistant response to chat history
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": response}
+                )
 
-        # Add assistant response to chat history
-        st.session_state.messages.append({"role": "assistant", "content": response})
+            with st.chat_message("assistant"):
+                st.markdown(response)
+
         st.session_state.chat_history = st.session_state.messages
 
 
-def page_main():
-    """
-    Main page of the application.
-    """
-    if "has_documents_uploaded" not in st.session_state:
-        st.session_state["has_documents_uploaded"] = False
-
-    st.title("AI RAG")
-    st.write(
-        "This is a simple chatbot that uses a vector database to store and retrieve documents."
-    )
-
-    st.caption("Upload your documents and start chatting with the AI!")
-
+def side_bar():
     with st.sidebar:
         st.title("Settings")
         st.session_state.pinecone_db = st.toggle("Use Pinecone Vector DB", value=False)
@@ -190,16 +188,31 @@ def page_main():
                 selected_files.remove(file)
 
         st.session_state.source_documents = selected_files
-        button_load_file = st.button("Load documents", use_container_width=True)
+        st.session_state.button_load_file = st.button(
+            "Load documents", use_container_width=True
+        )
 
-    if button_load_file:
-        if not st.session_state.source_documents:
-            st.toast(":red[No documents selected!]")
-        else:
-            save_files(st.session_state.source_documents)
 
-    if st.session_state["has_documents_uploaded"]:
-        chat_interface()
+"""
+Main page of the application.
+"""
+st.title("AI RAG")
+st.write(
+    "This is a simple chatbot that uses a vector database to store and retrieve documents."
+)
+
+st.caption("Upload your documents and start chatting with the AI!")
+
+side_bar()
+
+if st.session_state.button_load_file:
+    if not st.session_state.source_documents:
+        st.toast(":red[No documents selected!]")
+    else:
+        save_files(st.session_state.source_documents)
+
+if st.session_state.has_documents_uploaded:
+    chat_interface()
 
 
 def get_session_id():
@@ -210,5 +223,4 @@ def get_session_id():
 
 
 if __name__ == "__main__":
-    # st.session_state["session_id"] = get_session_id()
-    page_main()
+    st.session_state["session_id"] = get_session_id()
