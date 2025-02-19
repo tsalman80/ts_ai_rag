@@ -1,3 +1,7 @@
+__import__('pysqlite3')
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+
 from langchain_chroma import Chroma
 from config import LOCAL_VECTOR_STORE_DIR, OPENAI_API_KEY
 from langchain_openai.embeddings import OpenAIEmbeddings
