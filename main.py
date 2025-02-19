@@ -103,7 +103,7 @@ def query_llm(retriever, query):
     return result["answer"]
 
 
-def upload_files():
+def create_tmp_dir():
     """Create a temporary directory."""
     tmp_dir = tempfile.mkdtemp(dir=TEMP_DIR)
     return tmp_dir
@@ -114,7 +114,7 @@ def save_files(uploaded_files):
         return
 
     # write the uploaded documents to the temporary directory
-    tmp_dir = upload_files()
+    tmp_dir = create_tmp_dir()
 
     status_bar = None
     status_bar = st.progress(0, text="In progress...")
