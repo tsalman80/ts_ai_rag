@@ -28,9 +28,11 @@ class PineconeVectorDB:
         )
 
         pc = PineconeClient(api_key=PINECONE_API_KEY)
-        vector_store = PineconeVectorStore(index=pc.Index(PINECONE_INDEX))
+        vector_store = PineconeVectorStore(
+            index=pc.Index(PINECONE_INDEX), embedding=embeddings
+        )
         vs = vector_store.from_documents(texts, embeddings, index_name=PINECONE_INDEX)
         vs.persist()
-        
+
         # retriever = vs.as_retriever(search_kwargs={"filter": {"session_id": st.session_state.session_id}})
         return vs.as_retriever()
