@@ -18,7 +18,7 @@ TEMP_DIR = BASE_DIR.joinpath("tmp").as_posix()
 LOCAL_VECTOR_STORE_DIR = BASE_DIR.joinpath("vector_store").as_posix()
 
 
-from langchain.globals import set_verbose, set_debug
+# from langchain.globals import set_verbose, set_debug
 
-set_verbose(True)
-set_debug(True)
+# set_verbose(True)
+# set_debug(True)
